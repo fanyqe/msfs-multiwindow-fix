@@ -8,8 +8,8 @@ locked or greyed out in Microsoft Flight Simulator 2024 after **Sim Update 6**
 
 > **Status:** workaround, not a mod. Nothing is patched on disk — the values are
 > written straight into the running sim, exactly where its own UI reads them
-> from. The sim updates the view immediately, and the value survives until you
-> close the sim.
+> from. The sim updates the view immediately and saves the values itself when it
+> exits.
 
 ---
 
@@ -56,9 +56,13 @@ back to searching for the exact `CameraDegRotationAdd` triple.
 
 ## Usage — prebuilt
 
-1. Start the sim and get to the main menu (a flight is not required).
+1. Start the sim first and get to the main menu (a flight is not required).
 2. Run `MSFS-MultiWindowFix.exe` and accept the UAC prompt.
 3. Drag a slider, or type a value and press Enter.
+4. **Make it stick:** open `Advanced Options → Multi Window`, look at the new
+   value, then close the panel. This makes the sim commit the settings, so they
+   survive a restart. (Skip this and the value still works for the session, but
+   the sim may save the old numbers on exit.)
 
 The header shows `connected · pid … · 0x…` once the offsets were located. If it
 says `sim not running`, start the sim and press **Reconnect**.
@@ -91,15 +95,18 @@ fall back to the English labels, because the sim shows English there too.
 
 ## Notes and limits
 
-- **Nothing is written to disk.** `UserCfg.opt` is only read. The values reset
-  when the sim closes, so set them again after a restart.
+- **Nothing is written to disk by the tool.** `UserCfg.opt` is only read. The sim
+  writes the values back itself — open `Advanced Options → Multi Window` once
+  after changing something and the sim commits them, so they survive a restart.
+  Verified on 1.9.24.0.
 - **Per-build offset.** After a sim update the tool rescans once and caches the
   new offset automatically. If it ever reports `several candidates`, pick the row
   whose numbers match the ones in the sim.
 - **Only the current position is fixed.** The underlying lock in the settings UI
   is a sim bug; this tool bypasses the UI instead of repairing it.
-- Tested with MSFS 2024 **1.9.24.0**. MSFS 2020 is detected by name but untested —
-  the `UserCfg.opt` layout may differ.
+- Tested with MSFS 2024 **1.9.24.0**. The config file is looked up in both the
+  MS Store (`%LOCALAPPDATA%\Packages\Microsoft.Limitless_*`) and Steam
+  (`%APPDATA%\Microsoft Flight Simulator 2024`) locations.
 - The value written is the raw float the sim uses. Fractions are supported
   through the text box; the sliders snap to whole degrees.
 

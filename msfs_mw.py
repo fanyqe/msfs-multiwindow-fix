@@ -34,7 +34,7 @@ WRITABLE = {0x04, 0x08, 0x40, 0x80}
 IMAGE = 0x1000000
 LIST_MODULES_ALL = 0x03
 
-EXE_NAMES = ('flightsimulator2024.exe', 'flightsimulator.exe')
+EXE_NAMES = ('flightsimulator2024.exe',)
 FIELDS = ('vertical', 'lateral', 'roll')   # bellek sirasi: +0, +4, +8
 ROW_ORDER = ('lateral', 'vertical', 'roll')  # ekranda oyunla ayni sirada
 SPAN = 180
@@ -91,7 +91,7 @@ def open_proc(pid):
 
 
 def find_pids():
-    """Calisan tum Flight Simulator sureclerini dondurur (2024/2020, Store/Steam)."""
+    """Calisan Flight Simulator 2024 sureclerini dondurur (Store/Steam)."""
     arr = (wt.DWORD * 8192)()
     need = wt.DWORD()
     if not psapi.EnumProcesses(arr, ctypes.sizeof(arr), ctypes.byref(need)):
@@ -248,7 +248,7 @@ def scan_candidates(pid, base=None):
                                 # uc float genelde +12'de, sirasiyla dene
                                 for off in (12, 8, 16):
                                     vals = read_struct(pid, hit + off)
-                                    if plausible(vals):
+                                    if plausible(vals) or (rot and same(vals, rot)):
                                         found.append((hit + off, vals))
                                         break
                             i = raw.find(needle, i + 1)
@@ -315,23 +315,28 @@ def scan_triple(h, base, size, rot):
 
 
 def ucfg_paths():
+    """Bilinen tum MSFS 2024 UserCfg.opt konumlari (Store + Steam)."""
     local = os.environ.get('LOCALAPPDATA', '')
     roam = os.environ.get('APPDATA', '')
     fixed = [
+        # MSFS 2024 - MS Store / Xbox app / Game Pass
         os.path.join(local, 'Packages', 'Microsoft.Limitless_8wekyb3d8bbwe', 'LocalCache', 'UserCfg.opt'),
-        os.path.join(local, 'Packages', 'Microsoft.FlightSimulator_8wekyb3d8bbwe', 'LocalCache', 'UserCfg.opt'),
+        # MSFS 2024 - Steam
         os.path.join(roam, 'Microsoft Flight Simulator 2024', 'UserCfg.opt'),
-        os.path.join(roam, 'Microsoft Flight Simulator', 'UserCfg.opt'),
     ]
     found = [p for p in fixed if os.path.isfile(p)]
-    if not found:
-        pat = os.path.join(local, 'Packages', 'Microsoft.*', 'LocalCache', 'UserCfg.opt')
-        found = glob.glob(pat)
+    # kurulum yolu beklenenden farkliysa (or. yeniden adlandirilmis profil klasoru)
+    for pat in (os.path.join(local, 'Packages', '*', 'LocalCache', 'UserCfg.opt'),
+                os.path.join(roam, '*Flight Simulator*', 'UserCfg.opt')):
+        for p in glob.glob(pat):
+            if p not in found:
+                found.append(p)
     return found
 
 
 def read_windows():
-    """UserCfg.opt -> [(ad, PosX, PosY, aktif, [vertical, lateral, roll])]."""
+    """Tum UserCfg.opt dosyalarindan [(ad, PosX, PosY, aktif, [vertical, lateral, roll])]."""
+    out, seen = [], set()
     for path in ucfg_paths():
         try:
             with open(path, encoding='utf-8', errors='replace') as f:
@@ -341,12 +346,14 @@ def read_windows():
         wins = {}
         for m in re.finditer(r'^[ \t]*WindowCustom(\d+)\.(\w+)[ \t]+(.+?)[ \t]*$', text, re.M):
             wins.setdefault(m.group(1), {})[m.group(2)] = m.group(3)
-        out = []
         for idx, d in wins.items():
             try:
                 x, y = int(d.get('PosX', '')), int(d.get('PosY', ''))
             except ValueError:
                 continue
+            if (x, y) in seen:
+                continue
+            seen.add((x, y))
             rot = None
             try:
                 parts = [float(v) for v in d.get('CameraDegRotationAdd', '').split()]
@@ -355,9 +362,7 @@ def read_windows():
             except ValueError:
                 rot = None
             out.append((f'WindowCustom{idx}', x, y, d.get('WindowActive') == '1', rot))
-        if out:
-            return out
-    return []
+    return out
 
 
 def adopt(pid, addr):

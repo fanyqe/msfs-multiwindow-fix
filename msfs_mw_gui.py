@@ -356,23 +356,32 @@ class App:
 
     # ---------------- yeniden bulma ----------------
     def on_detect(self):
-        if self.pid:
-            try:
-                addr, rva, cands = core.locate(self.pid, rescan=True)
-            except OSError:
-                self.hint.config(text=self.t['admin'], fg=ERR)
-                return
-            if addr is not None:
-                self.addr = addr
-                self.refresh_status()
-                self.hint.config(text=f"{self.t['detected']}: RVA 0x{rva:X}", fg=OK)
-                return
-            if cands:
-                self.pick_candidate(self.pid, cands)
-                return
-        self.connect()
         if not self.pid:
-            self.hint.config(text=self.t['not_running'], fg=ERR)
+            self.connect()
+            if not self.pid:
+                self.hint.config(text=self.t['not_running'], fg=ERR)
+                return
+        try:
+            addr, rva, cands = core.locate(self.pid, rescan=True)
+        except OSError:
+            self.hint.config(text=self.t['admin'], fg=ERR)
+            return
+        if addr is not None:
+            self.addr = addr
+            self.refresh_status()
+            self.hint.config(text=f"{self.t['detected']}: RVA 0x{rva:X}", fg=OK)
+            return
+        if cands:
+            self.pick_candidate(self.pid, cands)
+
+    def accept(self, pid, addr):
+        rva = core.adopt(pid, addr)
+        self.pid, self.addr = pid, addr
+        self.refresh_status()
+        self.hint.config(text=f"{self.t['detected']}: RVA 0x{rva:X}", fg=OK)
+        vals = core.read_struct(pid, addr)
+        if vals and core.sane(vals):
+            self.render(vals)
 
     def pick_candidate(self, pid, cands):
         t = self.t
@@ -395,14 +404,8 @@ class App:
             sel = box.curselection()
             if not sel:
                 return
-            rva = core.adopt(pid, cands[sel[0]][0])
             win.destroy()
-            self.pid, self.addr = pid, cands[sel[0]][0]
-            self.refresh_status()
-            self.hint.config(text=f"{self.t['detected']}: RVA 0x{rva:X}", fg=OK)
-            vals = core.read_struct(pid, self.addr)
-            if vals and core.sane(vals):
-                self.render(vals)
+            self.accept(pid, cands[sel[0]][0])
 
         btns = tk.Frame(win, bg=BG)
         btns.pack(fill='x', padx=16, pady=12)
