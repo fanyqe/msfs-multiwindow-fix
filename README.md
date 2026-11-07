@@ -1,5 +1,7 @@
 # MSFS Multi Window Rotation Fix
 
+![The tool running next to the sim](screenshot.png)
+
 Fixes the **Multi Window rotation offsets** (lateral / vertical / roll) that get
 locked or greyed out in Microsoft Flight Simulator 2024 after **Sim Update 6**
 (build 1.8.14.0).
