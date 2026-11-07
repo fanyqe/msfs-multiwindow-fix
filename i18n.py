@@ -163,24 +163,6 @@ UI = {
 FALLBACK = 'en-US'
 
 
-def detect_locale():
-    """Windows arayuz dilinden desteklenen locale; yoksa en-US."""
-    try:
-        langid = k32_langid()
-    except Exception:
-        return FALLBACK
-    primary = langid & 0x3FF
-    table = {0x09: 'en-US', 0x1F: 'tr-TR', 0x07: 'de-DE', 0x0A: 'es-ES', 0x0C: 'fr-FR',
-             0x10: 'it-IT', 0x15: 'pl-PL', 0x16: 'pt-BR', 0x19: 'ru-RU', 0x1D: 'sv-SE',
-             0x14: 'nb-NO', 0x0B: 'fi-FI', 0x11: 'ja-JP', 0x12: 'ko-KR', 0x04: 'zh-CN'}
-    return table.get(primary, FALLBACK)
-
-
-def k32_langid():
-    import ctypes
-    return ctypes.windll.kernel32.GetUserDefaultUILanguage()
-
-
 def strings(locale):
     return UI.get(locale, UI[FALLBACK])
 

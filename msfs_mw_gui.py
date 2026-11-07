@@ -3,13 +3,11 @@
 # Cekirdek msfs_mw.py'de; bu dosya sadece arayuz.
 
 import tkinter as tk
-from tkinter import messagebox
 import i18n
 import msfs_mw as core
 
 BG, PANEL, FG, DIM = '#181a1d', '#22262b', '#e6e8eb', '#8b939c'
 ACCENT, ERR, OK, FIELD = '#3b82f6', '#ef4444', '#22c55e', '#0e1013'
-TRACK_HI, TRACK_LO = '#1e3a8a', '#60a5fa'
 
 
 def _hex(c):

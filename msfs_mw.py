@@ -222,7 +222,7 @@ def scan_candidates(pid, base=None):
             base, size = base, module_info(h)[1]
         if not base:
             return []
-        found = []
+        found = []   # (adres, uc float)
         for name, x, y, active, rot in read_windows():
             if x == 0 and y == 0:
                 continue  # (0,0) her yerde var, ayirt edici degil
@@ -245,11 +245,11 @@ def scan_candidates(pid, base=None):
                             if i % 4 == 0:
                                 hit = b + i
                                 # konum ciftinden sonra kisa bir bosluk var;
-                                # uc float'i UserCfg'deki degerlerle dogrula
+                                # uc float genelde +12'de, sirasiyla dene
                                 for off in (12, 8, 16):
                                     vals = read_struct(pid, hit + off)
-                                    if vals and sane(vals) and (rot is None or same(vals, rot)):
-                                        found.append(hit + off)
+                                    if plausible(vals):
+                                        found.append((hit + off, vals))
                                         break
                             i = raw.find(needle, i + 1)
                 addr = b + s
@@ -257,20 +257,36 @@ def scan_candidates(pid, base=None):
             # konum yok/sifir: UserCfg'deki aci degerlerini dogrudan ara
             for _n, _x, _y, _a, rot in read_windows():
                 if rot:
-                    found.extend(scan_triple(h, base, size, rot))
+                    found.extend((a, read_struct(pid, a))
+                                 for a in scan_triple(h, base, size, rot))
                     break
-        out = []
-        for a in found:
-            vals = read_struct(pid, a)
-            if vals and sane(vals):
-                out.append((a, vals[0], vals[1], vals[2]))
-        return out
+        # UserCfg degeri eskiyebilir; eslesen varsa onu tercih et, yoksa hepsi
+        rots = [rot for _n, _x, _y, _a, rot in read_windows() if rot]
+        if rots:
+            exact = [(a, v) for a, v in found if same(v, rots[0])]
+            if exact:
+                found = exact
+        uniq = {}
+        for a, v in found:
+            uniq[a] = v
+        return [(a, v[0], v[1], v[2]) for a, v in uniq.items()]
     finally:
         k32.CloseHandle(h)
 
 
 def same(vals, rot, tol=0.01):
     return all(abs(v - r) <= tol for v, r in zip(vals, rot))
+
+
+def plausible(vals):
+    """Uc float gercekten rotation offset'e benziyor mu?
+
+    Aci degerleri ya sifir ya da normal buyuklukte olur; denormal float'lar
+    (or. 1.4e-45) rastgele bellek artigidir.
+    """
+    if not vals or not sane(vals) or all(v == 0 for v in vals):
+        return False
+    return all(v == 0 or abs(v) >= 0.001 for v in vals)
 
 
 def scan_triple(h, base, size, rot):
@@ -451,5 +467,48 @@ def parse_updates(args):
     return out
 
 
+def selftest():
+    """Sim gerekmeden calisan kontroller: python msfs_mw.py selftest"""
+    assert FIELDS == ('vertical', 'lateral', 'roll')          # bellek sirasi
+    assert ROW_ORDER == ('lateral', 'vertical', 'roll')       # ekran sirasi
+    assert FIELDS.index('roll') * 4 == 8                      # +8 roll
+    assert parse_updates(['lateral', '92', 'roll', '-9']) == [('lateral', 92.0), ('roll', -9.0)]
+    for bad in (['lateral'], ['bogus', '1'], ['lateral', 'x']):
+        try:
+            parse_updates(bad)
+        except (SystemExit, ValueError):
+            pass
+        else:
+            raise AssertionError(f'reddetmeliydi: {bad}')
+    assert sane([-4.0, 90.0, 0.0]) and sane([0.0, 0.0, 9.0])
+    assert not sane([0.0, -734288.0, 0.0])                    # rastgele bellek
+    # plausible(): hakiki ucgen gecer, rastgele artefakt gecmez
+    assert plausible([-4.0, 90.0, 0.0])
+    assert plausible([0.0, 0.0, 9.0])
+    assert not plausible([0.0, 0.0, 0.0])                     # hepsi sifir: ayirt edici degil
+    assert not plausible([90.0, 0.0, 1.401298464324817e-45])  # denormal artik
+    # ayni(): config degeri ile bellek degeri karsilastirmasi
+    assert same([-4.0, 90.0, 0.0], [-4.0, 90.0, 0.0])
+    assert not same([-4.0, 90.0, 0.0], [12.0, 90.0, 0.0])
+    # konum cifti + 12 bayt = uc float (bu makinede dogrulanan duzen)
+    blob = struct.pack('<ii', 2587, 309) + struct.pack('<f', 0.0) + \
+        struct.pack('<3f', -4.0, 90.0, 0.0)
+    assert first_offset(blob) == 12
+    print('[OK] selftest gecti')
+
+
+def first_offset(blob):
+    """Yardimci: plausible ucgenin ilk bulundugu ofset; yoksa None."""
+    for off in (12, 8, 16):
+        if off + 12 <= len(blob):
+            vals = [float(v) for v in np.frombuffer(blob[off:off + 12], dtype=np.float32)]
+            if plausible(vals):
+                return off
+    return None
+
+
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == 'selftest':
+        selftest()
+    else:
+        main()
